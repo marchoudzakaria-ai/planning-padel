@@ -15,6 +15,9 @@
 const CONFIG = {
   // Adresse de ton app en ligne (Netlify, GitHub Pages…), ex. 'https://planning-padel.netlify.app/'
   APP_URL: 'https://marchoudzakaria-ai.github.io/planning-padel/',
+  // Adresse publique du script (Déployer → Gérer les déploiements → URL qui finit par /exec).
+  // Laisse vide : le script la devine. Remplis-la si le lien généré contient « /dev ».
+  WEBAPP_URL: '',
 
   DAYS: 120,                    // fenêtre de recherche dans Gmail (jours)
   MAX_THREADS_PER_SOURCE: 50,
@@ -54,7 +57,8 @@ function installer() {
 
 /** ▶ À lancer après le déploiement : affiche le lien qui configure l'app sur ton téléphone en un clic. */
 function lienPourTelephone() {
-  const url = ScriptApp.getService().getUrl();
+  const url = CONFIG.WEBAPP_URL || ScriptApp.getService().getUrl();
+  if (/\/dev$/.test(url)) throw new Error('Adresse de test (/dev) détectée : copie l’URL qui finit par /exec (Déployer → Gérer les déploiements) dans WEBAPP_URL, puis relance.');
   const token = PROPS.getProperty('TOKEN');
   if (!token) throw new Error('Lance d’abord la fonction « installer ».');
   if (!url) throw new Error('Déploie d’abord le script en Application Web (Déployer → Nouveau déploiement).');
