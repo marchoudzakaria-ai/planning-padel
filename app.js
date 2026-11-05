@@ -495,9 +495,15 @@
       file.text().then(function (txt) {
         var data = JSON.parse(txt);
         if (!Array.isArray(data.events)) throw new Error('format');
-        var known = {}; events.forEach(function (e) { known[e.id] = 1; if (e.sourceId) known[e.sourceId] = 1; });
-        var add = data.events.filter(function (e) { return !known[e.id] && !(e.sourceId && known[e.sourceId]); });
-        events = events.concat(add); persist(); render(); toast(add.length + ' événement(s) importé(s)');
+        var byId = {}, bySrc = {};
+        events.forEach(function (e) { byId[e.id] = e; if (e.sourceId) bySrc[e.sourceId] = e; });
+        var added = 0, replaced = 0;
+        data.events.forEach(function (e) {
+          var local = byId[e.id] || (e.sourceId && bySrc[e.sourceId]);
+          if (!local) { events.push(e); added++; }
+          else if (e.edited && !local.edited) { Object.assign(local, e, { id: local.id }); replaced++; } // version nettoyée > version brute de la synchro
+        });
+        persist(); render(); toast(added + ' importé(s), ' + replaced + ' mis à jour');
       }).catch(function () { toast('Fichier invalide'); });
     };
     inp.click();

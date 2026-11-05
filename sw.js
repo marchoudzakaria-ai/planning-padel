@@ -1,5 +1,5 @@
 /* Service worker : l'app fonctionne hors ligne (cache "réseau d'abord", repli sur le cache). */
-const CACHE = 'padel-v3';
+const CACHE = 'padel-v4';
 const ASSETS = ['./', 'index.html', 'app.js', 'parser.js', 'manifest.webmanifest', 'icon.svg'];
 const CDN = 'https://cdn.tailwindcss.com/3.4.16';
 
