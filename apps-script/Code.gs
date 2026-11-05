@@ -145,13 +145,21 @@ function collect_() {
   });
 
   items.sort(function (a, b) { return a.receivedAt - b.receivedAt; }); // du plus ancien au plus récent
+  const RANK = { repere: 0, attente: 1, inscrit: 2, confirme: 3 };
   const byKey = {};
   items.forEach(function (ev) {
     const key = padelEventKey(ev);
     const cur = byKey[key];
+    if (ev.status === 'annule') ev.annulAt = ev.receivedAt;
     if (!cur) { byKey[key] = ev; return; }
     Object.keys(ev).forEach(function (k) { if (!cur[k] && ev[k]) cur[k] = ev[k]; });
-    cur.status = ev.status;           // le dernier e-mail reçu fixe le statut
+    // Ten'Up fait foi pour le nom du tournoi, le club et le lien
+    if (ev.source === 'tenup') ['title', 'club', 'link', 'category'].forEach(function (k) { if (ev[k]) cur[k] = ev[k]; });
+    // Statut : une annulation récente l'emporte ; sinon on garde le statut le plus avancé (confirmé > inscrit > attente)
+    if (ev.status === 'annule') cur.status = 'annule';
+    else if (cur.status === 'annule' && RANK[ev.status] >= RANK.inscrit && ev.receivedAt > cur.annulAt) cur.status = ev.status; // réinscription
+    else if (cur.status !== 'annule' && RANK[ev.status] > RANK[cur.status]) cur.status = ev.status;
+    if (ev.status === 'annule') cur.annulAt = ev.receivedAt;
     cur.receivedAt = ev.receivedAt;
   });
 
@@ -160,7 +168,7 @@ function collect_() {
     const ev = byKey[key];
     ev.sourceId = key;
     if (!ev.link) ev.link = ev.mail;
-    delete ev.mail; delete ev.receivedAt;
+    delete ev.mail; delete ev.receivedAt; delete ev.annulAt;
     return ev;
   }).filter(function (ev) { return ev.date >= minDate; })
     .sort(function (a, b) { return (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')); });
@@ -189,7 +197,7 @@ var MONTH_RE = '(janvier|février|fevrier|mars|avril|mai|juin|juillet|août|aout
 var NAME = "[A-ZÀ-Ý][A-Za-zÀ-ÿ'’\\-]+(?: [A-ZÀ-Ý][A-Za-zÀ-ÿ'’\\-]+){0,2}";
 
 function pad(n) { return (n < 10 ? '0' : '') + n; }
-function clean(s) { return String(s || '').replace(/\s+/g, ' ').replace(/^[\s,.;:–-]+|[\s,.;:–-]+$/g, ''); }
+function clean(s) { return String(s || '').replace(/[*_|]/g, ' ').replace(/\s+/g, ' ').replace(/^[\s,.;:–-]+|[\s,.;:–-]+$/g, ''); }
 
 // Sans année : année courante, ou la suivante si la date est passée depuis plus de 60 jours.
 function guessYear(m, d, now) {
@@ -232,9 +240,10 @@ function parsePadelText(text, subject, now) {
   if (m) out.time = pad(+m[1]) + ':' + (m[2] || '00');
 
   // --- Type (on regarde surtout le début du mail) ---
-  var partieHead = /pour la partie|la partie du|partie ouverte|open match|match ouvert|annulation du match/.test(head);
+  // Une phrase explicite sur « la partie » l'emporte (les e-mails 4PADEL contiennent parfois des pubs de tournois)
+  var partieHead = /pour la partie|la partie du|la partie qui|partie ouverte|open match|match ouvert|annulation du match/.test(head);
   var tournoiHead = /tournoi|homologu|juge[\s-]arbitre|convocation|\bp\s?(25|50|100|250|500|1000|1500|2000)\b|épreuve/.test(head);
-  out.type = partieHead && !/tournoi/.test(head) ? 'partie' : (tournoiHead ? 'tournoi' : (/partie|réservation|reservation|terrain|piste/.test(low) ? 'partie' : 'tournoi'));
+  out.type = partieHead ? 'partie' : (tournoiHead ? 'tournoi' : (/partie|réservation|reservation|terrain|piste/.test(low) ? 'partie' : 'tournoi'));
 
   // --- Catégorie FFT ---
   m = flat.match(/\bP\s?(25|50|100|250|500|1000|1500|2000)\b/i);
@@ -290,18 +299,15 @@ function parsePadelText(text, subject, now) {
   var genericSubject = /^(votre inscription|playtomic|confirmation|re:|tr:|fwd?:)\s*$/i.test(subject.trim()) || /^\[/.test(subject.trim()) || /^(re|tr|fwd?)\s*:/i.test(subject.trim());
   if (m && out.type === 'tournoi') out.title = clean(m[1]);
   else if (out.type === 'partie') out.title = 'Partie' + (out.club ? ' – ' + out.club : '');
-  else if (subject && !genericSubject) out.title = subject.trim().slice(0, 90);
+  else if (subject && !genericSubject) out.title = clean(subject.replace(/[^\w\sÀ-ÿ'’()\-–—·:/]/g, '')).slice(0, 90);
   else out.title = 'Tournoi' + (out.category ? ' ' + out.category : '') + (out.club ? ' – ' + out.club : '');
 
   return out;
 }
 
-// Même tournoi = même type + même date + même catégorie ; même partie = même date + même heure.
+// Même tournoi = même date (la catégorie n'est pas toujours écrite) ; même partie = même date + même heure.
 function padelEventKey(ev) {
   if (!ev || !ev.date) return '';
-  return ev.type === 'partie'
-    ? 'partie:' + ev.date + ':' + (ev.time || '')
-    : 'tournoi:' + ev.date + ':' + (ev.category || ev.time || '');
+  return ev.type === 'partie' ? 'partie:' + ev.date + ':' + (ev.time || '') : 'tournoi:' + ev.date;
 }
-
 

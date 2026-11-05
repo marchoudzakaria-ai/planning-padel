@@ -14,7 +14,7 @@
   var NAME = "[A-ZÀ-Ý][A-Za-zÀ-ÿ'’\\-]+(?: [A-ZÀ-Ý][A-Za-zÀ-ÿ'’\\-]+){0,2}";
 
   function pad(n) { return (n < 10 ? '0' : '') + n; }
-  function clean(s) { return String(s || '').replace(/\s+/g, ' ').replace(/^[\s,.;:–-]+|[\s,.;:–-]+$/g, ''); }
+  function clean(s) { return String(s || '').replace(/[*_|]/g, ' ').replace(/\s+/g, ' ').replace(/^[\s,.;:–-]+|[\s,.;:–-]+$/g, ''); }
 
   // Sans année : année courante, ou la suivante si la date est passée depuis plus de 60 jours.
   function guessYear(m, d, now) {
@@ -57,9 +57,10 @@
     if (m) out.time = pad(+m[1]) + ':' + (m[2] || '00');
 
     // --- Type (on regarde surtout le début du mail) ---
-    var partieHead = /pour la partie|la partie du|partie ouverte|open match|match ouvert|annulation du match/.test(head);
+    // Une phrase explicite sur « la partie » l'emporte (les e-mails 4PADEL contiennent parfois des pubs de tournois)
+    var partieHead = /pour la partie|la partie du|la partie qui|partie ouverte|open match|match ouvert|annulation du match/.test(head);
     var tournoiHead = /tournoi|homologu|juge[\s-]arbitre|convocation|\bp\s?(25|50|100|250|500|1000|1500|2000)\b|épreuve/.test(head);
-    out.type = partieHead && !/tournoi/.test(head) ? 'partie' : (tournoiHead ? 'tournoi' : (/partie|réservation|reservation|terrain|piste/.test(low) ? 'partie' : 'tournoi'));
+    out.type = partieHead ? 'partie' : (tournoiHead ? 'tournoi' : (/partie|réservation|reservation|terrain|piste/.test(low) ? 'partie' : 'tournoi'));
 
     // --- Catégorie FFT ---
     m = flat.match(/\bP\s?(25|50|100|250|500|1000|1500|2000)\b/i);
@@ -115,18 +116,16 @@
     var genericSubject = /^(votre inscription|playtomic|confirmation|re:|tr:|fwd?:)\s*$/i.test(subject.trim()) || /^\[/.test(subject.trim()) || /^(re|tr|fwd?)\s*:/i.test(subject.trim());
     if (m && out.type === 'tournoi') out.title = clean(m[1]);
     else if (out.type === 'partie') out.title = 'Partie' + (out.club ? ' – ' + out.club : '');
-    else if (subject && !genericSubject) out.title = subject.trim().slice(0, 90);
+    else if (subject && !genericSubject) out.title = clean(subject.replace(/[^\w\sÀ-ÿ'’()\-–—·:/]/g, '')).slice(0, 90);
     else out.title = 'Tournoi' + (out.category ? ' ' + out.category : '') + (out.club ? ' – ' + out.club : '');
 
     return out;
   }
 
-  // Même tournoi = même type + même date + même catégorie ; même partie = même date + même heure.
+  // Même tournoi = même date (la catégorie n'est pas toujours écrite) ; même partie = même date + même heure.
   function padelEventKey(ev) {
     if (!ev || !ev.date) return '';
-    return ev.type === 'partie'
-      ? 'partie:' + ev.date + ':' + (ev.time || '')
-      : 'tournoi:' + ev.date + ':' + (ev.category || ev.time || '');
+    return ev.type === 'partie' ? 'partie:' + ev.date + ':' + (ev.time || '') : 'tournoi:' + ev.date;
   }
 
   root.parsePadelText = parsePadelText;
